@@ -385,13 +385,13 @@ def single_run(config: dict):
 
         def scanned_update(carry):
             carry, metrics = jax.lax.scan(do_update, carry, None, length=gradient_steps)
-            qf_l, act_l, qf1_v = metrics
-            return carry, (qf_l[-1], act_l[-1], qf1_v[-1])
+            qf_l, act_l, qf1_v, a_val = metrics
+            return carry, (qf_l[-1], act_l[-1], qf1_v[-1], a_val)
 
         (actor_state, qf1_state, qf2_state, log_alpha, a_opt_state, rng), (qf_loss, actor_loss, qf1_val, alpha) = jax.lax.cond(
             replay_buffer.can_sample(buffer_state),
             lambda c: scanned_update(c),
-            lambda c: (c, (jnp.array(0.0), jnp.array(0.0), jnp.array(0.0))),
+            lambda c: (c, (jnp.array(0.0), jnp.array(0.0), jnp.array(0.0), jnp.array([[0.0]]))),
             (actor_state, qf1_state, qf2_state, log_alpha, a_opt_state, rng), 
         )
 
