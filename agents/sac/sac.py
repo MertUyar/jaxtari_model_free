@@ -381,21 +381,21 @@ def single_run(config: dict):
                 updates, a_opt_state = a_optimizer.update(alpha_grad, a_opt_state, log_alpha)
                 log_alpha = optax.apply_updates(log_alpha, updates)
 
-            return (new_actor_state, new_qf1_state, new_qf2_state, log_alpha, a_opt_state, u_key), (qf_loss, actor_loss, qf1_pred_a_values)
+            return (new_actor_state, new_qf1_state, new_qf2_state, log_alpha, a_opt_state, u_key), (qf_loss, actor_loss, qf1_pred_a_values, alpha)
 
         def scanned_update(carry):
             carry, metrics = jax.lax.scan(do_update, carry, None, length=gradient_steps)
             qf_l, act_l, qf1_v = metrics
             return carry, (qf_l[-1], act_l[-1], qf1_v[-1])
 
-        (actor_state, qf1_state, qf2_state, log_alpha, a_opt_state, rng), (qf_loss, actor_loss, qf1_val) = jax.lax.cond(
+        (actor_state, qf1_state, qf2_state, log_alpha, a_opt_state, rng), (qf_loss, actor_loss, qf1_val, alpha) = jax.lax.cond(
             replay_buffer.can_sample(buffer_state),
             lambda c: scanned_update(c),
             lambda c: (c, (jnp.array(0.0), jnp.array(0.0), jnp.array(0.0))),
             (actor_state, qf1_state, qf2_state, log_alpha, a_opt_state, rng), 
         )
 
-        return (actor_state, qf1_state, qf2_state, log_alpha, a_opt_state, buffer_state, next_env_state, next_obs, rng, global_step), (infos, qf_loss, actor_loss, qf1_val)
+        return (actor_state, qf1_state, qf2_state, log_alpha, a_opt_state, buffer_state, next_env_state, next_obs, rng, global_step), (infos, qf_loss, actor_loss, qf1_val, alpha)
 
     def save_and_eval(step_count):
         if config.get("SAVE_PATH", "./models") is not None:
@@ -482,7 +482,7 @@ def single_run(config: dict):
            
         iteration_time_start = time.perf_counter()
         result = scanned_steps(sac_carry)
-        sac_carry, (infos, qf_loss, actor_loss, qf1_val) = result
+        sac_carry, (infos, qf_loss, actor_loss, qf1_val, alpha) = result
         global_step = int(sac_carry[-1])
         
         print(f"[sac] iteration {iteration} | step {global_step} | avg_return {infos['returned_episode_returns'][-1].mean():.2f} | qf_loss {qf_loss[-1]:.4f} | act_loss {actor_loss[-1]:.4f} | SPS {int(global_step / (time.perf_counter() - run_time))}")
@@ -492,7 +492,8 @@ def single_run(config: dict):
             "charts/avg_episodic_length": infos["returned_episode_lengths"][-1].mean(),
             "losses/qf_loss": qf_loss[-1].item(),
             "losses/actor_loss": actor_loss[-1].item(),
-            "losses/qf1_values": qf1_val[-1].item(), 
+            "losses/qf1_values": qf1_val[-1].item(),
+            "losses/alpha_values": alpha[-1].item(),
             "charts/SPS": int(global_step / (time.perf_counter() - run_time)),
             "charts/SPS_update": int(config["NUM_ENVS"] * config["TRAIN_FREQUENCY"] * config["SCAN_STEPS"]  / (time.perf_counter() - iteration_time_start)),
             "charts/time": time.perf_counter() - run_time,
