@@ -381,17 +381,17 @@ def single_run(config: dict):
                 updates, a_opt_state = a_optimizer.update(alpha_grad, a_opt_state, log_alpha)
                 log_alpha = optax.apply_updates(log_alpha, updates)
 
-            return (new_actor_state, new_qf1_state, new_qf2_state, log_alpha, a_opt_state, u_key), (qf_loss, actor_loss, qf1_pred_a_values, alpha)
+            return (new_actor_state, new_qf1_state, new_qf2_state, log_alpha, a_opt_state, u_key), (qf_loss, actor_loss, qf1_pred_a_values, alpha.flatten())
 
         def scanned_update(carry):
             carry, metrics = jax.lax.scan(do_update, carry, None, length=gradient_steps)
             qf_l, act_l, qf1_v, a_val = metrics
-            return carry, (qf_l[-1], act_l[-1], qf1_v[-1], a_val)
+            return carry, (qf_l[-1], act_l[-1], qf1_v[-1], a_val[-1])
 
         (actor_state, qf1_state, qf2_state, log_alpha, a_opt_state, rng), (qf_loss, actor_loss, qf1_val, alpha) = jax.lax.cond(
             replay_buffer.can_sample(buffer_state),
             lambda c: scanned_update(c),
-            lambda c: (c, (jnp.array(0.0), jnp.array(0.0), jnp.array(0.0), jnp.zeros((gradient_steps, 1)))),
+            lambda c: (c, (jnp.array(0.0), jnp.array(0.0), jnp.array(0.0), jnp.zeros((gradient_steps)))),
             (actor_state, qf1_state, qf2_state, log_alpha, a_opt_state, rng), 
         )
 
