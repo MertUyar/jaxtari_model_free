@@ -227,19 +227,19 @@ def single_run(config: dict):
     actor_state = TrainState.create(
         apply_fn=actor_net.apply,
         params=actor_net.init(actor_key, dummy_obs, actor_key2),
-        tx=optax.adam(learning_rate=config.get("LEARNING_RATE", 3e-4)),
+        tx=optax.adam(learning_rate=config.get("LEARNING_RATE", 3e-4), eps=1e-4),
     )
     qf1_state = SACTrainState.create(
         apply_fn=critic_net.apply,
         params=critic_net.init(qf1_key, dummy_obs),
         target_params=critic_net.init(qf1_key, dummy_obs),
-        tx=optax.adam(learning_rate=config.get("LEARNING_RATE", 3e-4)),
+        tx=optax.adam(learning_rate=config.get("LEARNING_RATE", 3e-4), eps=1e-4),
     )
     qf2_state = SACTrainState.create(
         apply_fn=critic_net.apply,
         params=critic_net.init(qf2_key, dummy_obs),
         target_params=critic_net.init(qf2_key, dummy_obs),
-        tx=optax.adam(learning_rate=config.get("LEARNING_RATE", 3e-4)),
+        tx=optax.adam(learning_rate=config.get("LEARNING_RATE", 3e-4), eps=1e-4),
     )
 
     replay_buffer = fbx.make_prioritised_flat_buffer(
@@ -343,45 +343,45 @@ def single_run(config: dict):
                 new_qf2_pred = new_qf2_state.apply_fn(new_qf2_state.params, b_obs)
                 _, log_pi, action_probs = actor_state.apply_fn(actor_params, b_obs, sample_key3)
                 min_qf_values = jax.lax.stop_gradient(jnp.minimum(new_qf1_pred, new_qf2_pred))
-                actor_loss = (action_probs * ((alpha * log_pi) - min_qf_values)).sum(axis=-1).mean()
+                actor_loss = (action_probs * ((alpha * log_pi) - min_qf_values)).mean()
                 return actor_loss, (log_pi, action_probs)
             
             (actor_loss, (log_pi, action_probs)), actor_grads = jax.value_and_grad(actor_loss_fn, has_aux=True)(u_actor_state.params, u_actor_state)
             new_actor_state = u_actor_state.apply_gradients(grads=actor_grads)
             
-            def update_target_networks(c):
-                c_qf1, c_qf2 = c
-                updated_qf1 = c_qf1.replace(
-                    target_params=optax.incremental_update(c_qf1.params, c_qf1.target_params, tau)
-                )
-                updated_qf2 = c_qf2.replace(
-                    target_params=optax.incremental_update(c_qf2.params, c_qf2.target_params, tau)
-                )
-                return updated_qf1, updated_qf2
-
-            steps_per_update = config.get("TRAIN_FREQUENCY", 4) * config.get("NUM_ENVS", 1)
-            update_target_flag = jnp.logical_and(
-                replay_buffer.can_sample(buffer_state),
-                (global_step % config.get("TARGET_NETWORK_FREQUENCY", 8000)) < steps_per_update
-            )
-            new_qf1_state, new_qf2_state = jax.lax.cond(
-                update_target_flag,
-                update_target_networks,
-                lambda c: c,
-                (new_qf1_state, new_qf2_state)
-            )
 
             if config.get("AUTOTUNE", True):
                 def alpha_loss_fn(log_alpha):
                     action_probs_detached = jax.lax.stop_gradient(action_probs)
                     entropy_diff = jax.lax.stop_gradient(log_pi + target_entropy)
-                    return jnp.mean(jnp.sum(action_probs_detached * -jnp.exp(log_alpha) * entropy_diff, axis=-1))
+                    return jnp.mean(action_probs_detached * -jnp.exp(log_alpha) * entropy_diff)
 
                 _, alpha_grad = jax.value_and_grad(alpha_loss_fn)(log_alpha)
                 updates, a_opt_state = a_optimizer.update(alpha_grad, a_opt_state, log_alpha)
                 log_alpha = optax.apply_updates(log_alpha, updates)
 
             return (new_actor_state, new_qf1_state, new_qf2_state, log_alpha, a_opt_state, u_key), (qf_loss, actor_loss, qf1_pred_a_values, alpha)
+
+        def update_target_networks(c):
+            c_qf1, c_qf2 = c
+            updated_qf1 = c_qf1.replace(
+                target_params=optax.incremental_update(c_qf1.params, c_qf1.target_params, tau)
+            )
+            updated_qf2 = c_qf2.replace(
+                target_params=optax.incremental_update(c_qf2.params, c_qf2.target_params, tau)
+            )
+            return updated_qf1, updated_qf2
+        steps_per_update = config.get("TRAIN_FREQUENCY", 4) * config.get("NUM_ENVS", 1)
+        update_target_flag = jnp.logical_and(
+            replay_buffer.can_sample(buffer_state),
+            (global_step % config.get("TARGET_UPDATE_FREQUENCY", 8000)) < steps_per_update
+        )
+        new_qf1_state, new_qf2_state = jax.lax.cond(
+            update_target_flag,
+            update_target_networks,
+            lambda c: c,
+            (new_qf1_state, new_qf2_state)
+        )
 
         def scanned_update(carry):
             carry, metrics = jax.lax.scan(do_update, carry, None, length=gradient_steps)
