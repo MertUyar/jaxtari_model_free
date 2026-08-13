@@ -391,7 +391,7 @@ def single_run(config: dict):
         (actor_state, qf1_state, qf2_state, log_alpha, a_opt_state, rng), (qf_loss, actor_loss, qf1_val, alpha) = jax.lax.cond(
             replay_buffer.can_sample(buffer_state),
             lambda c: scanned_update(c),
-            lambda c: (c, (jnp.array(0.0), jnp.array(0.0), jnp.array(0.0), jnp.array([[0.0]]))),
+            lambda c: (c, (jnp.array(0.0), jnp.array(0.0), jnp.array(0.0), jnp.zeros(gradient_steps, 1))),
             (actor_state, qf1_state, qf2_state, log_alpha, a_opt_state, rng), 
         )
 
