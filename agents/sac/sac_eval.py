@@ -27,13 +27,13 @@ def evaluate(
     @jax.jit
     def wrapped_reset(key):
         next_obs, state = env.reset(key)
-        return next_obs.squeeze()[None, ...], state
+        return next_obs.squeeze(), state
 
     @jax.jit
     def wrapped_step(state, action):
         next_obs, next_state, reward, terminated, truncated, info = env.step(state, action.squeeze())
         done = jnp.logical_or(terminated, truncated)
-        return next_obs.squeeze()[None, ...], next_state, reward, done, info
+        return next_obs.squeeze(), next_state, reward, done, info
 
     key, reset_key, sample_key, network_key, init_key, step_fn_key = jax.random.split(key, 6)
     next_obs, handle = wrapped_reset(reset_key)
