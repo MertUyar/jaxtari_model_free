@@ -15,7 +15,7 @@ GRADIENT_STEPS: 16 #-1 is too unstable, giving the same value as num_envs seems 
 TARGET_UPDATE_FREQUENCY: 8000
 
 AUTOTUNE: True
-TARGET_ENTROPY_SCALE: 0.7 # tested for 0.7, 0.5, 0.3. 0.7 gave the best outcome.
+TARGET_ENTROPY_SCALE: 0.89
 ALPHA: 0.2
 
 SCAN_STEPS: 1000
