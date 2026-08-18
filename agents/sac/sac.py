@@ -343,7 +343,7 @@ def single_run(config: dict):
                 new_qf2_pred = new_qf2_state.apply_fn(new_qf2_state.params, b_obs)
                 _, log_pi, action_probs = actor_state.apply_fn(actor_params, b_obs, sample_key3)
                 min_qf_values = jax.lax.stop_gradient(jnp.minimum(new_qf1_pred, new_qf2_pred))
-                actor_loss = (action_probs * ((alpha * log_pi) - min_qf_values)).mean()
+                actor_loss = jnp.sum((action_probs * ((alpha * log_pi) - min_qf_values)), axis=-1).mean()
                 return actor_loss, (log_pi, action_probs)
             
             (actor_loss, (log_pi, action_probs)), actor_grads = jax.value_and_grad(actor_loss_fn, has_aux=True)(u_actor_state.params, u_actor_state)
@@ -374,7 +374,7 @@ def single_run(config: dict):
                 def alpha_loss_fn(log_alpha):
                     action_probs_detached = jax.lax.stop_gradient(action_probs)
                     entropy_diff = jax.lax.stop_gradient(log_pi + target_entropy)
-                    return jnp.mean(action_probs_detached * -jnp.exp(log_alpha) * entropy_diff)
+                    return jnp.mean(jnp.sum((action_probs_detached * -log_alpha * entropy_diff), axis=-1))
 
                 _, alpha_grad = jax.value_and_grad(alpha_loss_fn)(log_alpha)
                 updates, a_opt_state = a_optimizer.update(alpha_grad, a_opt_state, log_alpha)
