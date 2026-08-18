@@ -374,7 +374,7 @@ def single_run(config: dict):
                 def alpha_loss_fn(log_alpha):
                     action_probs_detached = jax.lax.stop_gradient(action_probs)
                     entropy_diff = jax.lax.stop_gradient(log_pi + target_entropy)
-                    return jnp.mean(jnp.sum((action_probs_detached * -log_alpha * entropy_diff), axis=-1))
+                    return jnp.mean(jnp.sum((action_probs_detached * (-jnp.exp(log_alpha) * entropy_diff)), axis=-1))
 
                 _, alpha_grad = jax.value_and_grad(alpha_loss_fn)(log_alpha)
                 updates, a_opt_state = a_optimizer.update(alpha_grad, a_opt_state, log_alpha)
