@@ -221,7 +221,7 @@ def single_run(config: dict):
         apply_fn=actor_net.apply,
         params=actor_net.init(actor_key, dummy_obs),
         target_params=actor_net.init(actor_key, dummy_obs),
-        tx=optax.adam(learning_rate=config.get("LEARNING_RATE", 3e-4, eps=1e-4), eps=1e-4),
+        tx=optax.adam(learning_rate=config.get("LEARNING_RATE", 3e-4), eps=1e-4),
     )
     qf1_state = TD3TrainState.create(
         apply_fn=critic_net.apply,
