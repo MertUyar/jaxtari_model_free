@@ -337,7 +337,8 @@ def single_run(config: dict):
             new_qf2_state = u_qf2_state.apply_gradients(grads=grads2)
 
             # Delayed Policy Update
-            def perform_actor_update(c_actor, c_qf1):
+            def perform_actor_update(c):
+                c_actor, c_qf1 = c
                 def actor_loss_fn(actor_params):
                     gumbel_sample , _, _ = gumbel_softmax_sample(c_actor.apply_fn(actor_params, b_obs), sample_key3, temperature=temperature)
                     return -c_qf1.apply_fn(c_qf1.params, b_obs, gumbel_sample).mean()
@@ -347,7 +348,8 @@ def single_run(config: dict):
         
                 return updated_actor, actor_loss
 
-            def skip_actor_update(c_actor, c_qf1):
+            def skip_actor_update(c):
+                c_actor, c_qf1 = c
                 def actor_loss_fn(actor_params):
                     gumbel_sample , _, _ = gumbel_softmax_sample(c_actor.apply_fn(actor_params, b_obs), sample_key3, temperature=temperature)
                     return -c_qf1.apply_fn(c_qf1.params, b_obs, gumbel_sample).mean()
