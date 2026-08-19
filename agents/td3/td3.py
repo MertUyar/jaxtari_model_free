@@ -204,6 +204,8 @@ def single_run(config: dict):
     policy_update_frequency = config.get("POLICY_UPDATE_FREQUENCY", 2)
     target_update_frequency = config.get("TARGET_UPDATE_FREQUENCY", 8000)
     learning_starts = config.get("LEARNING_STARTS", 20000)
+    steps_per_update = config.get("TRAIN_FREQUENCY", 4) * config.get("NUM_ENVS", 1)
+
 
     key, actor_key, qf1_key, qf2_key = jax.random.split(key, 4)
     
@@ -305,7 +307,7 @@ def single_run(config: dict):
         )
 
         def do_update(update_carry, _):
-            u_actor_state, u_qf1_state, u_qf2_state, u_key = update_carry
+            u_actor_state, u_qf1_state, u_qf2_state, u_key, gradient_step_counter = update_carry
             u_key, sample_key, sample_key2, sample_key3 = jax.random.split(u_key, 4)
 
             batch = replay_buffer.sample(buffer_state, sample_key).experience
@@ -355,12 +357,10 @@ def single_run(config: dict):
                     return -c_qf1.apply_fn(c_qf1.params, b_obs, gumbel_sample).mean()
                 return c_actor, actor_loss_fn(c_actor.params)
 
-            can_sample = replay_buffer.can_sample(buffer_state)
-            steps_per_update = config.get("TRAIN_FREQUENCY", 4) * config.get("NUM_ENVS", 1)
 
             update_actor_flag = jnp.logical_and(
-                can_sample,
-                (global_step // steps_per_update) % 2
+                replay_buffer.can_sample(buffer_state),
+                gradient_step_counter % policy_update_frequency
             )
 
             u_actor_state, actor_loss = jax.lax.cond(
@@ -370,42 +370,44 @@ def single_run(config: dict):
                 (u_actor_state, new_qf1_state)
             )
 
-            update_target_flag = jnp.logical_and(
-                can_sample,
-                (global_step % target_update_frequency) < steps_per_update
-            )
+            
+            return (u_actor_state, new_qf1_state, new_qf2_state, u_key, gradient_step_counter + 1), (qf1_loss, qf2_loss, actor_loss, qf1_val)
 
-            def update_target_networks(c):
-                c_actor, c_qf1, c_qf2 = c
-                updated_actor = c_actor.replace(
-                    target_params=optax.incremental_update(c_actor.params, c_actor.target_params, tau)
-                )
-                updated_qf1 = c_qf1.replace(
-                    target_params=optax.incremental_update(c_qf1.params, c_qf1.target_params, tau)
-                )
-                updated_qf2 = c_qf2.replace(
-                    target_params=optax.incremental_update(c_qf2.params, c_qf2.target_params, tau)
-                )
-                return updated_actor, updated_qf1, updated_qf2
-
-            new_actor_state, new_qf1_state, new_qf2_state = jax.lax.cond(
-                update_target_flag,
-                update_target_networks,
-                lambda c: c,
-                (u_actor_state, new_qf1_state, new_qf2_state)
+        update_target_flag = jnp.logical_and(
+            replay_buffer.can_sample(buffer_state),
+            (global_step % target_update_frequency) < steps_per_update
+        )
+        
+        def update_target_networks(c):
+            c_actor, c_qf1, c_qf2 = c
+            updated_actor = c_actor.replace(
+                target_params=optax.incremental_update(c_actor.params, c_actor.target_params, tau)
             )
-            return (new_actor_state, new_qf1_state, new_qf2_state, u_key), (qf1_loss, qf2_loss, actor_loss, qf1_val)
+            updated_qf1 = c_qf1.replace(
+                target_params=optax.incremental_update(c_qf1.params, c_qf1.target_params, tau)
+            )
+            updated_qf2 = c_qf2.replace(
+                target_params=optax.incremental_update(c_qf2.params, c_qf2.target_params, tau)
+            )
+            return updated_actor, updated_qf1, updated_qf2
+        
+        actor_state, qf1_state, qf2_state = jax.lax.cond(
+            update_target_flag,
+            update_target_networks,
+            lambda c: c,
+            (actor_state, qf1_state, qf2_state)
+        )
 
         def scanned_update(carry):
             carry, metrics = jax.lax.scan(do_update, carry, None, length=gradient_steps)
             qf1_l, qf2_l, act_l, qf1_v = metrics
             return carry, (qf1_l[-1], qf2_l[-1], act_l[-1], qf1_v[-1])
 
-        (actor_state, qf1_state, qf2_state, rng), (qf1_loss, qf2_loss, actor_loss, qf1_val) = jax.lax.cond(
+        (actor_state, qf1_state, qf2_state, rng, gradient_step_counter), (qf1_loss, qf2_loss, actor_loss, qf1_val) = jax.lax.cond(
             replay_buffer.can_sample(buffer_state),
             lambda c: scanned_update(c),
             lambda c: (c, (jnp.array(0.0), jnp.array(0.0), jnp.array(0.0), jnp.array(0.0))),
-            (actor_state, qf1_state, qf2_state, rng), 
+            (actor_state, qf1_state, qf2_state, rng, global_step // steps_per_update), 
         )
         # temperature = jnp.clip(1.0 - 0.8 * global_step / config["TOTAL_TIMESTEPS"], 0.2, 1.0,)
 
