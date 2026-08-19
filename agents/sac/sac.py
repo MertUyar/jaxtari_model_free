@@ -365,27 +365,7 @@ def single_run(config: dict):
 
             return (new_actor_state, new_qf1_state, new_qf2_state, log_alpha, a_opt_state, u_key), (qf_loss, actor_loss, qf1_pred_a_values, alpha)
 
-        def update_target_networks(c):
-            c_qf1, c_qf2 = c
-            updated_qf1 = c_qf1.replace(
-                target_params=optax.incremental_update(c_qf1.params, c_qf1.target_params, tau)
-            )
-            updated_qf2 = c_qf2.replace(
-                target_params=optax.incremental_update(c_qf2.params, c_qf2.target_params, tau)
-            )
-            return updated_qf1, updated_qf2
-
-        update_target_flag = jnp.logical_and(
-            replay_buffer.can_sample(buffer_state),
-            (global_step % config.get("TARGET_UPDATE_FREQUENCY", 8000)) < steps_per_update
-        )
-        qf1_state, qf2_state = jax.lax.cond(
-            update_target_flag,
-            update_target_networks,
-            lambda c: c,
-            (qf1_state, qf2_state)
-        )
-
+    
         def scanned_update(carry):
             carry, metrics = jax.lax.scan(do_update, carry, None, length=gradient_steps)
             qf_l, act_l, qf1_v, a_val = metrics
@@ -397,6 +377,28 @@ def single_run(config: dict):
             lambda c: (c, (jnp.array(0.0), jnp.array(0.0), jnp.array(0.0), jnp.array(0.0))),
             (actor_state, qf1_state, qf2_state, log_alpha, a_opt_state, rng), 
         )
+
+        def update_target_networks(c):
+            c_qf1, c_qf2 = c
+            updated_qf1 = c_qf1.replace(
+                target_params=optax.incremental_update(c_qf1.params, c_qf1.target_params, tau)
+            )
+            updated_qf2 = c_qf2.replace(
+                target_params=optax.incremental_update(c_qf2.params, c_qf2.target_params, tau)
+            )
+            return updated_qf1, updated_qf2
+        
+        update_target_flag = jnp.logical_and(
+            replay_buffer.can_sample(buffer_state),
+            (global_step % config.get("TARGET_UPDATE_FREQUENCY", 8000)) < steps_per_update
+        )
+
+        qf1_state, qf2_state = jax.lax.cond(
+            update_target_flag,
+            update_target_networks, 
+            lambda c: c,
+            (qf1_state, qf2_state)
+            )
 
         return (actor_state, qf1_state, qf2_state, log_alpha, a_opt_state, buffer_state, next_env_state, next_obs, rng, global_step), (infos, qf_loss, actor_loss, qf1_val, alpha)
 
