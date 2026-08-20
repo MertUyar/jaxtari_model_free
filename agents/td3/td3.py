@@ -350,25 +350,23 @@ def single_run(config: dict):
         
                 return updated_actor, actor_loss
 
-            def skip_actor_update(c):
-                c_actor, c_qf1 = c
-                def actor_loss_fn(actor_params):
-                    gumbel_sample , _, _ = gumbel_softmax_sample(c_actor.apply_fn(actor_params, b_obs), sample_key3, temperature=temperature)
-                    return -c_qf1.apply_fn(c_qf1.params, b_obs, gumbel_sample).mean()
-                return c_actor, actor_loss_fn(c_actor.params)
+            u_actor_state, actor_loss = perform_actor_update((u_actor_state, new_qf1_state))
 
+            # Delayed actor update of original TD3, but update frequency of 1 works better for atari
+            #
+            # def skip_actor_update(c):
+            #    c_actor, c_qf1 = c
+            #    def actor_loss_fn(actor_params):
+            #        gumbel_sample , _, _ = gumbel_softmax_sample(c_actor.apply_fn(actor_params, b_obs), sample_key3, temperature=temperature)
+            #        return -c_qf1.apply_fn(c_qf1.params, b_obs, gumbel_sample).mean()
+            #    return c_actor, actor_loss_fn(c_actor.params)
 
-            update_actor_flag = jnp.logical_and(
-                replay_buffer.can_sample(buffer_state),
-                gradient_step_counter % policy_update_frequency == 0
-            )
-
-            u_actor_state, actor_loss = jax.lax.cond(
-                update_actor_flag,
-                perform_actor_update,
-                skip_actor_update,
-                (u_actor_state, new_qf1_state)
-            )
+            #u_actor_state, actor_loss = jax.lax.cond(
+            #    gradient_step_counter % policy_update_frequency == 0,
+            #    perform_actor_update,
+            #    skip_actor_update,
+            #    (u_actor_state, new_qf1_state)
+            #)
 
             
             return (u_actor_state, new_qf1_state, new_qf2_state, u_key, gradient_step_counter + 1), (qf1_loss, qf2_loss, actor_loss, qf1_val)
