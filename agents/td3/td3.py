@@ -360,7 +360,7 @@ def single_run(config: dict):
 
             update_actor_flag = jnp.logical_and(
                 replay_buffer.can_sample(buffer_state),
-                gradient_step_counter % policy_update_frequency
+                gradient_step_counter % policy_update_frequency == 0
             )
 
             u_actor_state, actor_loss = jax.lax.cond(
@@ -502,7 +502,7 @@ def single_run(config: dict):
         iteration_time_start = time.perf_counter()
         result = scanned_steps(td3_carry)
         td3_carry, (infos, qf1_loss, qf2_loss, actor_loss, qf1_val) = result
-        global_step = int(td3_carry[-1])
+        global_step = int(td3_carry[-2])
         
         print(f"[td3] iteration {iteration} | step {global_step} | avg_return {infos['returned_episode_returns'][-1].mean():.2f} | qf1_loss {qf1_loss[-1]:.4f} | act_loss {actor_loss[-1]:.4f} | SPS {int(global_step / (time.perf_counter() - run_time))}")
         
