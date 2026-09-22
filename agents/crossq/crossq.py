@@ -642,9 +642,8 @@ def single_run(config: dict):
 
                 if config.get("AUTOTUNE", True):
                     def alpha_loss_fn(a_log_alpha):
-                        action_probs_detached = jax.lax.stop_gradient(action_probs)
-                        entropy_diff = jax.lax.stop_gradient(log_pi + target_entropy)
-                        return jnp.mean(jnp.sum((action_probs_detached * (-jnp.exp(a_log_alpha) * entropy_diff)), axis=-1))
+                        entropy_diff = jax.lax.stop_gradient(jnp.sum(action_probs * (log_pi + target_entropy), axis=-1))
+                        return -jnp.mean(a_log_alpha * entropy_diff)
 
                     _, alpha_grad = jax.value_and_grad(alpha_loss_fn)(d_log_alpha)
                     updates, d_a_opt_state = a_optimizer.update(alpha_grad, d_a_opt_state, d_log_alpha)
