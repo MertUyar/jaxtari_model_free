@@ -2,7 +2,6 @@ import os
 import random
 import time
 from functools import partial
-
 import flax
 import flax.linen as nn
 from flax.linen.initializers import zeros, ones
@@ -114,7 +113,6 @@ class BatchRenorm(nn.Module):
 
         feature_shape = (x.shape[axis],)
 
-        # Parameters
         if self.use_scale:
             scale = self.param(
                 "scale",
@@ -158,18 +156,15 @@ class BatchRenorm(nn.Module):
             if i != axis
         )
 
-        # Broadcast shape
         broadcast_shape = [1] * x.ndim
         broadcast_shape[axis] = x.shape[axis]
 
-        # Evaluation
         if self.use_running_average:
             mean = running_mean.value.reshape(broadcast_shape)
             var = running_var.value.reshape(broadcast_shape)
 
             y = (x - mean) * jax.lax.rsqrt(var + self.epsilon)
 
-        # Training
         else:
             batch_mean = jnp.mean(
                 x,
@@ -203,18 +198,14 @@ class BatchRenorm(nn.Module):
                 1.0
                 + relaxation_progress * (final_rmax - 1.0)
             )
-
             relaxed_dmax = (
                 relaxation_progress * final_dmax
             )
-
-            # Apply clipping
             r = jnp.clip(
                 r_raw,
                 1.0 / relaxed_rmax,
                 relaxed_rmax,
             )
-
             d = jnp.clip(
                 d_raw,
                 -relaxed_dmax,
@@ -359,7 +350,6 @@ class Pixel_Critic(nn.Module):
         x = nn.relu(x)
         x = nn.Dense(self.action_dim, kernel_init=nn.initializers.he_normal(), bias_init=constant(0.0))(x)
         return x
-
 
 class MLP_Actor_Discrete(nn.Module):
     action_dim: int
@@ -601,7 +591,6 @@ def single_run(config: dict):
             _, next_state_log_pi, next_state_action_probs = u_actor_state.apply_fn(p_actor, b_nobs, global_step, sample_key2, False)
 
             if use_target_network:
-                # Bootstrap from the target critic in eval mode (no gradient, stats not updated).
                 next_q_target = u_qf_state.apply_fn(qf_target, b_nobs, n_updates, False) # (2, B, A)
 
             def qf_loss_fn(qf_params, qf_state):
