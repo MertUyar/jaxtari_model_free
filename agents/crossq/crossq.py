@@ -291,13 +291,6 @@ class Pixel_Actor_Discrete(nn.Module):
             network=1,
         )(x, step)
         x = nn.relu(x)
-        x = nn.Dense(512, kernel_init=nn.initializers.he_normal(), bias_init=constant(0.0)  )(x)
-        x = BatchRenorm(use_running_average=not train,
-            momentum=self.configs.get("BATCHNORM_MOMENTUM", 0.99),
-            configs=self.configs,
-            network=1,
-        )(x, step)
-        x = nn.relu(x)
         x = nn.Dense(self.action_dim, kernel_init=nn.initializers.he_normal(), bias_init=constant(0.0))(x)
         sample = jax.random.categorical(key, x)
         action_probs = jax.nn.softmax(x, axis=-1)
@@ -335,13 +328,6 @@ class Pixel_Critic(nn.Module):
         x = nn.relu(x)
         x = x.reshape((x.shape[0], -1))
         x = nn.Dense(1024, kernel_init=nn.initializers.he_normal(), bias_init=constant(0.0))(x)
-        x = BatchRenorm(use_running_average=not train,
-            momentum=self.configs.get("BATCHNORM_MOMENTUM", 0.99),
-            configs=self.configs,
-            network=1,
-        )(x, step)
-        x = nn.relu(x)
-        x = nn.Dense(1024, kernel_init=nn.initializers.he_normal(), bias_init=constant(0.0)  )(x)
         x = BatchRenorm(use_running_average=not train,
             momentum=self.configs.get("BATCHNORM_MOMENTUM", 0.99),
             configs=self.configs,
